@@ -1,7 +1,7 @@
 """
 Binance Market Intelligence Agent
 ===================================
-Powered by Google Gemini API + Binance/CoinGecko Data
+Powered by OpenRouter API + Binance/CoinGecko Data
 Built for MUST Company Quest Submission
 """
 
@@ -16,32 +16,44 @@ load_dotenv()
 TOP_COINS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
              "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "DOTUSDT", "MATICUSDT"]
 MOVER_THRESHOLD = 2.0
+OPENROUTER_MODEL = "meta-llama/llama-3.1-8b-instruct:free"
 
 
 def get_api_key() -> str:
     try:
         import streamlit as st
-        return st.secrets["GEMINI_API_KEY"]
+        return st.secrets["OPENROUTER_API_KEY"]
     except Exception:
         pass
-    return os.getenv("GEMINI_API_KEY", "")
+    return os.getenv("OPENROUTER_API_KEY", "")
 
 
 def call_llm(prompt: str) -> str:
-    """Calls Google Gemini API via simple HTTP — works everywhere."""
+    """Calls OpenRouter API with LLaMA 3.1 — works on Streamlit Cloud."""
     api_key = get_api_key()
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={api_key}"
     response = requests.post(
-        url,
-        headers={"Content-Type": "application/json"},
-        json={"contents": [{"parts": [{"text": prompt}]}]},
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://binance-intelligence-agent-hgpu3gqn9a3x5kjfzzf96v.streamlit.app",
+            "X-Title": "Binance Intelligence Agent"
+        },
+        json={
+            "model": OPENROUTER_MODEL,
+            "messages": [
+                {"role": "system", "content": "You are a sharp, professional crypto market analyst."},
+                {"role": "user", "content": prompt}
+            ],
+            "max_tokens": 500,
+            "temperature": 0.7
+        },
         timeout=30
     )
     data = response.json()
-    try:
-        return data["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception:
-        raise Exception(f"Gemini error: {str(data)}")
+    if "choices" not in data:
+        raise Exception(f"OpenRouter error: {str(data)}")
+    return data["choices"][0]["message"]["content"]
 
 
 def fetch_binance_data() -> list[dict]:
