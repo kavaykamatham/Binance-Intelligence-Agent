@@ -1,58 +1,72 @@
 """
 Binance Market Intelligence Agent
 ===================================
-Powered by Groq (LLaMA 3.3 70B) + Binance Public API
+Powered by OpenRouter (LLaMA 3.3 70B) + Binance/CoinGecko API
 Built for MUST Company Quest Submission
 """
 
 import os
 import requests
-from groq import Groq
 from dotenv import load_dotenv
 from ddgs import DDGS
 from datetime import datetime
 
 load_dotenv()
 
-# ─────────────────────────────────────────────
-# READ API KEY — works both locally and on Streamlit Cloud
-# ─────────────────────────────────────────────
-def get_api_key() -> str:
-    # Try Streamlit secrets first (for cloud deployment)
-    try:
-        import streamlit as st
-        return st.secrets["GROQ_API_KEY"]
-    except Exception:
-        pass
-    # Fall back to .env for local development
-    return os.getenv("GROQ_API_KEY", "")
-
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL = "meta-llama/llama-3.3-70b-instruct"
 TOP_COINS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
              "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "DOTUSDT", "MATICUSDT"]
 MOVER_THRESHOLD = 2.0
 
-BINANCE_ENDPOINTS = [
-    "https://api.binance.com/api/v3/ticker/24hr",
-    "https://api1.binance.com/api/v3/ticker/24hr",
-    "https://api2.binance.com/api/v3/ticker/24hr",
-    "https://api3.binance.com/api/v3/ticker/24hr",
-]
+
+def get_api_key() -> str:
+    try:
+        import streamlit as st
+        return st.secrets["OPENROUTER_API_KEY"]
+    except Exception:
+        pass
+    return os.getenv("OPENROUTER_API_KEY", "")
+
+
+def call_llm(prompt: str) -> str:
+    """Calls OpenRouter API — works on Streamlit Cloud."""
+    api_key = get_api_key()
+    response = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://binance-intelligence-agent.streamlit.app",
+            "X-Title": "Binance Intelligence Agent"
+        },
+        json={
+            "model": GROQ_MODEL,
+            "messages": [
+                {"role": "system", "content": "You are a sharp, professional crypto market analyst."},
+                {"role": "user", "content": prompt}
+            ],
+            "max_tokens": 500,
+            "temperature": 0.7
+        },
+        timeout=30
+    )
+    data = response.json()
+    return data["choices"][0]["message"]["content"]
+
 
 def fetch_binance_data() -> list[dict]:
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    }
-    for endpoint in BINANCE_ENDPOINTS:
+    headers = {"User-Agent": "Mozilla/5.0"}
+    endpoints = [
+        "https://api.binance.com/api/v3/ticker/24hr",
+        "https://api1.binance.com/api/v3/ticker/24hr",
+        "https://api2.binance.com/api/v3/ticker/24hr",
+    ]
+    for endpoint in endpoints:
         try:
             coins = []
             for symbol in TOP_COINS:
-                resp = requests.get(
-                    endpoint,
-                    params={"symbol": symbol},
-                    headers=headers,
-                    timeout=10
-                )
+                resp = requests.get(endpoint, params={"symbol": symbol},
+                                    headers=headers, timeout=10)
                 if resp.status_code == 200:
                     item = resp.json()
                     coins.append({
@@ -87,11 +101,10 @@ def fetch_from_coingecko() -> list[dict]:
         coins = []
         for item in data:
             change_pct = item.get("price_change_percentage_24h") or 0
-            price = item.get("current_price") or 0
             coins.append({
                 "symbol": item["symbol"].upper(),
                 "pair": item["symbol"].upper() + "USDT",
-                "price": price,
+                "price": item.get("current_price") or 0,
                 "change_pct": change_pct,
                 "change_usd": item.get("price_change_24h") or 0,
                 "high_24h": item.get("high_24h") or 0,
@@ -124,9 +137,6 @@ def fetch_news(symbol: str) -> list[dict]:
 
 
 def generate_briefing(coins: list[dict], movers: list[dict], news_map: dict) -> str:
-    # Initialize Groq client here so it always uses the latest key
-    groq_client = Groq(api_key=get_api_key())
-
     market_lines = []
     for c in coins:
         arrow = "▲" if c["change_pct"] > 0 else "▼"
@@ -144,7 +154,7 @@ def generate_briefing(coins: list[dict], movers: list[dict], news_map: dict) -> 
             for a in articles:
                 news_context += f"  - {a['title']}: {a['snippet']}\n"
 
-    prompt = f"""You are a professional crypto market analyst giving a morning briefing to a trading desk.
+    prompt = f"""You are a professional crypto market analyst giving a morning briefing.
 
 Current Date/Time: {datetime.now().strftime('%B %d, %Y at %H:%M UTC')}
 
@@ -156,28 +166,19 @@ NOTABLE MOVERS NEWS:
 
 Write a sharp, professional market briefing (200-250 words) covering:
 1. Overall market sentiment (bullish/bearish/mixed) and why
-2. The top 2-3 movers — what's driving them based on the news
+2. The top 2-3 movers and what is driving them
 3. One key thing to watch in the next 24 hours
-4. One actionable insight for a trader/investor
+4. One actionable insight for a trader
 
-Use clear, direct language. No fluff. Sound like a Bloomberg analyst, not a chatbot."""
+Use clear, direct language. Sound like a Bloomberg analyst."""
 
-    response = groq_client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {"role": "system", "content": "You are a sharp, professional crypto market analyst."},
-            {"role": "user", "content": prompt}
-        ],
-        max_tokens=500,
-        temperature=0.7
-    )
-    return response.choices[0].message.content
+    return call_llm(prompt)
 
 
 def run_analysis() -> dict:
     coins = fetch_binance_data()
     if not coins:
-        return {"error": "Could not fetch market data. Please try again in a moment."}
+        return {"error": "Could not fetch market data. Please try again."}
 
     movers = get_big_movers(coins)
     news_map = {}
