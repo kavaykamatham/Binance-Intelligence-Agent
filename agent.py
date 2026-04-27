@@ -1,7 +1,7 @@
 """
 Binance Market Intelligence Agent
 ===================================
-Powered by OpenRouter (LLaMA 3.3 70B) + Binance/CoinGecko API
+Powered by Google Gemini API + Binance/CoinGecko Data
 Built for MUST Company Quest Submission
 """
 
@@ -13,7 +13,6 @@ from datetime import datetime
 
 load_dotenv()
 
-GROQ_MODEL = "mistralai/mistral-7b-instruct:free"
 TOP_COINS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
              "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "DOTUSDT", "MATICUSDT"]
 MOVER_THRESHOLD = 2.0
@@ -22,39 +21,27 @@ MOVER_THRESHOLD = 2.0
 def get_api_key() -> str:
     try:
         import streamlit as st
-        return st.secrets["OPENROUTER_API_KEY"]
+        return st.secrets["GEMINI_API_KEY"]
     except Exception:
         pass
-    return os.getenv("OPENROUTER_API_KEY", "")
+    return os.getenv("GEMINI_API_KEY", "")
 
 
 def call_llm(prompt: str) -> str:
-    """Calls OpenRouter API — works on Streamlit Cloud."""
+    """Calls Google Gemini API via simple HTTP — works everywhere."""
     api_key = get_api_key()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={api_key}"
     response = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://binance-intelligence-agent.streamlit.app",
-            "X-Title": "Binance Intelligence Agent"
-        },
-        json={
-            "model": GROQ_MODEL,
-            "messages": [
-                {"role": "system", "content": "You are a sharp, professional crypto market analyst."},
-                {"role": "user", "content": prompt}
-            ],
-            "max_tokens": 500,
-            "temperature": 0.7
-        },
+        url,
+        headers={"Content-Type": "application/json"},
+        json={"contents": [{"parts": [{"text": prompt}]}]},
         timeout=30
     )
     data = response.json()
-    if "choices" not in data:
-        error_msg = data.get("error", {}).get("message", str(data))
-        raise Exception(f"OpenRouter full response: {str(data)}")
-    return data["choices"][0]["message"]["content"]
+    try:
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    except Exception:
+        raise Exception(f"Gemini error: {str(data)}")
 
 
 def fetch_binance_data() -> list[dict]:
