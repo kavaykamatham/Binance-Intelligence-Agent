@@ -13,7 +13,7 @@ from datetime import datetime
 
 load_dotenv()
 
-GROQ_MODEL = "meta-llama/llama-3.3-70b-instruct"
+GROQ_MODEL = "mistralai/mistral-7b-instruct:free"
 TOP_COINS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
              "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "DOTUSDT", "MATICUSDT"]
 MOVER_THRESHOLD = 2.0
@@ -51,6 +51,9 @@ def call_llm(prompt: str) -> str:
         timeout=30
     )
     data = response.json()
+    if "choices" not in data:
+        error_msg = data.get("error", {}).get("message", str(data))
+        raise Exception(f"OpenRouter error: {error_msg}")
     return data["choices"][0]["message"]["content"]
 
 
