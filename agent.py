@@ -16,7 +16,7 @@ load_dotenv()
 TOP_COINS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
              "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "DOTUSDT", "MATICUSDT"]
 MOVER_THRESHOLD = 2.0
-OPENROUTER_MODEL = "meta-llama/llama-3.1-8b-instruct:free"
+OPENROUTER_MODEL = "openrouter/auto"
 
 
 def get_api_key() -> str:
