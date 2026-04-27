@@ -53,7 +53,7 @@ def call_llm(prompt: str) -> str:
     data = response.json()
     if "choices" not in data:
         error_msg = data.get("error", {}).get("message", str(data))
-        raise Exception(f"OpenRouter error: {error_msg}")
+        raise Exception(f"OpenRouter full response: {str(data)}")
     return data["choices"][0]["message"]["content"]
 
 
