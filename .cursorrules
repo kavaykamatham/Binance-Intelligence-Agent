@@ -1,0 +1,34 @@
+# .cursorrules
+# Binance Market Intelligence Agent
+
+## Project Overview
+AI agent that fetches live Binance market data, detects unusual movers,
+searches latest news, and uses Groq LLaMA 3.3 to generate a professional
+market briefing. Displayed via a dark-themed Streamlit dashboard.
+
+## Architecture
+- agent.py  → Core pipeline (Binance API → News → Groq AI → structured dict)
+- app.py    → Streamlit dashboard consuming agent.py output
+
+## Code Rules
+- All functions must have clear docstrings
+- Use type hints throughout
+- Groq API key loaded from .env (never hardcoded)
+- Keep functions single-purpose, max 40 lines each
+- Print status messages with emoji in CLI mode
+
+## Security
+- NEVER hardcode API keys
+- .env and .streamlit/secrets.toml are in .gitignore
+- Use os.getenv() for all credentials
+
+## Streamlit Rules
+- All styling via st.markdown with custom CSS
+- Dark theme: #080c14 background, #38bdf8 accent
+- Font: Space Mono (monospace) + Inter (body)
+- No use of st.dataframe or default Streamlit components for main UI
+
+## Binance API
+- Uses public endpoint only: https://api.binance.com/api/v3/ticker/24hr
+- No authentication required
+- MOVER_THRESHOLD = 2.0% for significant movement detection
