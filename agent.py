@@ -14,7 +14,18 @@ from datetime import datetime
 
 load_dotenv()
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+# ─────────────────────────────────────────────
+# READ API KEY — works both locally and on Streamlit Cloud
+# ─────────────────────────────────────────────
+def get_api_key() -> str:
+    # Try Streamlit secrets first (for cloud deployment)
+    try:
+        import streamlit as st
+        return st.secrets["GROQ_API_KEY"]
+    except Exception:
+        pass
+    # Fall back to .env for local development
+    return os.getenv("GROQ_API_KEY", "")
 
 GROQ_MODEL = "llama-3.3-70b-versatile"
 TOP_COINS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
@@ -29,18 +40,11 @@ BINANCE_ENDPOINTS = [
 ]
 
 def fetch_binance_data() -> list[dict]:
-    """
-    Tries multiple Binance endpoints (some regions block certain ones).
-    Falls back gracefully if all fail.
-    """
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     }
-
     for endpoint in BINANCE_ENDPOINTS:
         try:
-            print(f"Trying endpoint: {endpoint}")
-            # Fetch each coin individually to avoid region blocks on batch calls
             coins = []
             for symbol in TOP_COINS:
                 resp = requests.get(
@@ -61,25 +65,16 @@ def fetch_binance_data() -> list[dict]:
                         "low_24h": float(item["lowPrice"]),
                         "volume_usdt": float(item["quoteVolume"]),
                     })
-
             if coins:
                 coins.sort(key=lambda x: abs(x["change_pct"]), reverse=True)
                 return coins
-
-        except Exception as e:
-            print(f"Endpoint failed: {e}")
+        except Exception:
             continue
-
-    # Last resort: use CoinGecko (no region restrictions)
     return fetch_from_coingecko()
 
 
 def fetch_from_coingecko() -> list[dict]:
-    """
-    Fallback to CoinGecko public API — no region restrictions at all.
-    """
     try:
-        print("Trying CoinGecko fallback...")
         url = "https://api.coingecko.com/api/v3/coins/markets"
         params = {
             "vs_currency": "usd",
@@ -89,7 +84,6 @@ def fetch_from_coingecko() -> list[dict]:
         }
         resp = requests.get(url, params=params, timeout=15)
         data = resp.json()
-
         coins = []
         for item in data:
             change_pct = item.get("price_change_percentage_24h") or 0
@@ -104,13 +98,9 @@ def fetch_from_coingecko() -> list[dict]:
                 "low_24h": item.get("low_24h") or 0,
                 "volume_usdt": item.get("total_volume") or 0,
             })
-
         coins.sort(key=lambda x: abs(x["change_pct"]), reverse=True)
-        print(f"CoinGecko: got {len(coins)} coins")
         return coins
-
-    except Exception as e:
-        print(f"CoinGecko also failed: {e}")
+    except Exception:
         return []
 
 
@@ -134,6 +124,9 @@ def fetch_news(symbol: str) -> list[dict]:
 
 
 def generate_briefing(coins: list[dict], movers: list[dict], news_map: dict) -> str:
+    # Initialize Groq client here so it always uses the latest key
+    groq_client = Groq(api_key=get_api_key())
+
     market_lines = []
     for c in coins:
         arrow = "▲" if c["change_pct"] > 0 else "▼"
@@ -169,7 +162,7 @@ Write a sharp, professional market briefing (200-250 words) covering:
 
 Use clear, direct language. No fluff. Sound like a Bloomberg analyst, not a chatbot."""
 
-    response = client.chat.completions.create(
+    response = groq_client.chat.completions.create(
         model=GROQ_MODEL,
         messages=[
             {"role": "system", "content": "You are a sharp, professional crypto market analyst."},
@@ -184,7 +177,7 @@ Use clear, direct language. No fluff. Sound like a Bloomberg analyst, not a chat
 def run_analysis() -> dict:
     coins = fetch_binance_data()
     if not coins:
-        return {"error": "Could not fetch market data from Binance or CoinGecko. Please try again in a moment."}
+        return {"error": "Could not fetch market data. Please try again in a moment."}
 
     movers = get_big_movers(coins)
     news_map = {}
@@ -201,19 +194,3 @@ def run_analysis() -> dict:
         "briefing": briefing,
         "error": None
     }
-
-
-if __name__ == "__main__":
-    print("\n🚀 Binance Market Intelligence Agent")
-    print("=" * 50)
-    result = run_analysis()
-    if result.get("error"):
-        print(f"❌ {result['error']}")
-    else:
-        print(f"\n📅 {result['timestamp']}")
-        print("\n📊 TOP COINS:")
-        for c in result["coins"]:
-            arrow = "▲" if c["change_pct"] > 0 else "▼"
-            print(f"  {c['symbol']:8} ${c['price']:>12,.4f}  {arrow} {c['change_pct']:+.2f}%")
-        print(f"\n🤖 AI BRIEFING:\n")
-        print(result["briefing"])
