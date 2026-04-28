@@ -1,7 +1,7 @@
 """
 Binance Market Intelligence Agent
 ===================================
-Powered by Groq (local) / OpenRouter (cloud)
+Powered by Groq API (HTTP) + Binance/CoinGecko Data
 Built for MUST Company Quest Submission
 """
 
@@ -16,81 +16,45 @@ load_dotenv()
 TOP_COINS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
              "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "DOTUSDT", "MATICUSDT"]
 MOVER_THRESHOLD = 2.0
+GROQ_MODEL = "llama-3.3-70b-versatile"
 
 
-def get_secret(key: str) -> str:
-    """Read from Streamlit secrets (cloud) or .env (local)."""
+def get_api_key() -> str:
+    """Read Groq key from Streamlit Secrets (cloud) or .env (local)."""
     try:
         import streamlit as st
-        val = st.secrets.get(key, "")
-        if val:
-            return val
+        key = st.secrets.get("GROQ_API_KEY", "")
+        if key:
+            return key
     except Exception:
         pass
-    return os.getenv(key, "")
+    return os.getenv("GROQ_API_KEY", "")
 
 
 def call_llm(prompt: str) -> str:
-    """
-    Tries Groq first (fast, free, works locally).
-    Falls back to OpenRouter if Groq key not available.
-    """
-    groq_key = get_secret("GROQ_API_KEY")
-    openrouter_key = get_secret("OPENROUTER_API_KEY")
-
-    # Try Groq first
-    if groq_key:
-        try:
-            resp = requests.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {groq_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": [
-                        {"role": "system", "content": "You are a sharp, professional crypto market analyst."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "max_tokens": 500,
-                    "temperature": 0.7
-                },
-                timeout=30
-            )
-            data = resp.json()
-            if "choices" in data:
-                return data["choices"][0]["message"]["content"]
-        except Exception as e:
-            print(f"Groq failed: {e}, trying OpenRouter...")
-
-    # Fallback to OpenRouter
-    if openrouter_key:
-        resp = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {openrouter_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://binance-intelligence-agent-hgpu3gqn9a3x5kjfzzf96v.streamlit.app",
-                "X-Title": "Binance Intelligence Agent"
-            },
-            json={
-                "model": "openrouter/auto",
-                "messages": [
-                    {"role": "system", "content": "You are a sharp, professional crypto market analyst."},
-                    {"role": "user", "content": prompt}
-                ],
-                "max_tokens": 500,
-                "temperature": 0.7
-            },
-            timeout=30
-        )
-        data = resp.json()
-        if "choices" in data:
-            return data["choices"][0]["message"]["content"]
-        raise Exception(f"OpenRouter error: {str(data)}")
-
-    raise Exception("No API key found. Please set GROQ_API_KEY or OPENROUTER_API_KEY.")
+    """Call Groq API via plain HTTP — works locally and on Streamlit Cloud."""
+    api_key = get_api_key()
+    response = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": GROQ_MODEL,
+            "messages": [
+                {"role": "system", "content": "You are a sharp, professional crypto market analyst."},
+                {"role": "user", "content": prompt}
+            ],
+            "max_tokens": 500,
+            "temperature": 0.7
+        },
+        timeout=30
+    )
+    data = response.json()
+    if "choices" not in data:
+        raise Exception(f"Groq error: {str(data)}")
+    return data["choices"][0]["message"]["content"]
 
 
 def fetch_binance_data() -> list[dict]:
