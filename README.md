@@ -4,7 +4,7 @@
 > fetches breaking news, and delivers a professional plain-English briefing —
 > powered by Groq LLaMA 3.3 70B.
 
-**🔴 Live Demo**: [Deploy link here after Streamlit deployment]
+**🔴 Live Demo**: https://binance-intelligence-agent-hgpu3gqn9a3x5kjfzzf96v.streamlit.app/
 
 ---
 
