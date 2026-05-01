@@ -429,7 +429,7 @@ else:
     <div style="margin-top:2rem;padding-top:1rem;border-top:1px solid #1e2d45;
                 font-family:'Space Mono',monospace;font-size:0.65rem;color:#334155;
                 display:flex;justify-content:space-between;">
-        <span>BINANCE INTELLIGENCE AGENT // MUST COMPANY QUEST SUBMISSION</span>
+        <span>BINANCE INTELLIGENCE AGENT // BUILT BY KAVYA KAMATHAM</span>
         <span>DATA: BINANCE PUBLIC API // AI: GROQ LLAMA 3.3 70B</span>
     </div>
     """, unsafe_allow_html=True)
